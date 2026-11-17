@@ -5,6 +5,7 @@
 
 import { BOSS_TIME, COLORS, RUN_DURATION, xpForLevel } from './config.js';
 import { waveNumberAt } from './waves.js';
+import { drawBloom } from './render.js';
 
 export const SCREEN_TITLE = 'title';
 export const SCREEN_PLAY = 'play';
@@ -169,7 +170,12 @@ function drawMenuButton(ctx, field, label) {
 
 export function drawTitleScreen(ctx, state) {
   const { field } = state;
-  dimField(ctx, field, 0.45);
+  // The Bloom itself glows behind the title — the prize, half-open, waiting.
+  ctx.save();
+  ctx.globalAlpha = 0.5;
+  drawBloom(ctx, field, state.time, 0.78 + Math.sin(state.time * 0.8) * 0.05, field.height * 0.44);
+  ctx.restore();
+  dimField(ctx, field, 0.38);
   centredText(ctx, field, 'VOID BLOOM', field.height / 2 - 150, '800 64px system-ui, sans-serif', '#eafff3');
   centredText(ctx, field, 'a seed ship · a hungry garden · five minutes', field.height / 2 - 104, '500 17px system-ui, sans-serif', COLORS.xp);
   centredText(ctx, field, 'Void mites swarm the last seed ship. Survive until 5:00 and the Bloom opens.', field.height / 2 - 52, '400 16px system-ui, sans-serif', COLORS.text);
