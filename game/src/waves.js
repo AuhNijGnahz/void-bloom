@@ -7,7 +7,7 @@ import { BOSS_TIME, WAVE_SECONDS } from './config.js';
 import { edgeSpawnPoint, spawnEnemy } from './enemies.js';
 
 export function createWaveDirector() {
-  return { spawnTimer: 1.2, bossSpawned: false, bossRef: null };
+  return { spawnTimer: 0.5, bossSpawned: false, bossRef: null, opened: false, warnedBoss: false };
 }
 
 /** Wave number for a moment in the run (1-based). */
@@ -15,9 +15,9 @@ export function waveNumberAt(elapsed) {
   return Math.floor(elapsed / WAVE_SECONDS) + 1;
 }
 
-/** Seconds between spawns: 1.15 s at the start, tightening to ~0.3 s late. */
+/** Seconds between spawns: 1.0 s at the start, tightening to ~0.3 s late. */
 function spawnIntervalAt(elapsed) {
-  return Math.max(0.3, 1.15 - elapsed * 0.0028);
+  return Math.max(0.3, 1.0 - elapsed * 0.0028);
 }
 
 /** How many enemies may hunt at once; the garden fills as the run goes on. */
@@ -42,6 +42,17 @@ function kindAt(elapsed, rng) {
  */
 export function updateWaves(director, dt, elapsed, field, player, enemies, rng) {
   let event = null;
+  // The run opens with action, not an empty field: a loose ring of mites is
+  // already hunting when the seed wakes, so the first seconds have targets.
+  if (!director.opened) {
+    director.opened = true;
+    for (let i = 0; i < 5; i += 1) {
+      const angle = (i / 5) * Math.PI * 2 + rng() * 0.5;
+      const x = Math.min(field.width - 30, Math.max(30, player.x + Math.cos(angle) * 330));
+      const y = Math.min(field.height - 30, Math.max(30, player.y + Math.sin(angle) * 330));
+      enemies.push(spawnEnemy('mite', x, y, elapsed));
+    }
+  }
   if (!director.bossSpawned && elapsed >= BOSS_TIME) {
     director.bossSpawned = true;
     const boss = spawnEnemy('boss', field.width / 2, 90, elapsed);

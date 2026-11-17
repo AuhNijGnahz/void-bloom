@@ -17,11 +17,11 @@ export const WAVE_SECONDS = 20;
 /** Player seed ship base stats, before any upgrade card is taken. */
 export const PLAYER_BASE = {
   maxHp: 100,
-  speed: 265,
+  speed: 275,
   radius: 15,
   damage: 12,
-  fireInterval: 0.24,
-  boltSpeed: 640,
+  fireInterval: 0.22,
+  boltSpeed: 700,
   magnetRadius: 90,
   projectiles: 1,
   pierce: 0,
@@ -34,12 +34,12 @@ export const ENEMY_TYPES = {
   mite: { hp: 18, speed: 92, radius: 13, damage: 10, score: 10, xp: 1, color: '#ff4d8d' },
   dart: { hp: 10, speed: 178, radius: 10, damage: 8, score: 15, xp: 1, color: '#ffb02e' },
   brute: { hp: 85, speed: 52, radius: 24, damage: 18, score: 30, xp: 3, color: '#b26bff' },
-  boss: { hp: 1450, speed: 34, radius: 58, damage: 24, score: 500, xp: 30, color: '#ff3860' },
+  boss: { hp: 2200, speed: 34, radius: 58, damage: 24, score: 500, xp: 30, color: '#ff3860' },
 };
 
 /** XP needed to go from `level` to `level + 1`. */
 export function xpForLevel(level) {
-  return 6 + (level - 1) * 5;
+  return 5 + (level - 1) * 4;
 }
 
 /** Score bonus for winning, plus one point per HP left at the Bloom. */

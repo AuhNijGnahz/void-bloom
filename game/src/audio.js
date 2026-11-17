@@ -7,6 +7,7 @@
 export function createAudioEngine() {
   let context = null;
   let master = null;
+  let musicTimer = null;
 
   /** Create (or resume) the context. Call from a click or keypress handler. */
   function unlock() {
@@ -20,6 +21,57 @@ export function createAudioEngine() {
     master = context.createGain();
     master.gain.value = 0.32;
     master.connect(context.destination);
+    startMusic();
+  }
+
+  /**
+   * A slow ambient loop under the action: a four-chord minor progression,
+   * one soft bass note per beat and a pad that breathes every bar. Scheduled
+   * with a lookahead timer so it holds together without per-frame work.
+   */
+  function startMusic() {
+    if (musicTimer !== null || !context) return;
+    const roots = [110.0, 87.31, 130.81, 98.0]; // A2 · F2 · C3 · G2
+    let step = 0;
+    let nextAt = context.currentTime + 0.1;
+    const tick = () => {
+      if (!context || context.state !== 'running') return;
+      while (nextAt < context.currentTime + 0.35) {
+        const bar = Math.floor(step / 4) % roots.length;
+        const root = roots[bar];
+        const when = Math.max(nextAt, context.currentTime);
+        const beat = step % 4;
+        // Bass pulse on the first and third beat of each bar.
+        if (beat === 0 || beat === 2) {
+          const osc = context.createOscillator();
+          const gain = context.createGain();
+          osc.type = 'triangle';
+          osc.frequency.value = root;
+          gain.gain.setValueAtTime(0.0001, when);
+          gain.gain.exponentialRampToValueAtTime(0.11, when + 0.04);
+          gain.gain.exponentialRampToValueAtTime(0.0001, when + 0.55);
+          osc.connect(gain).connect(master);
+          osc.start(when);
+          osc.stop(when + 0.6);
+        }
+        // A fifth shimmering above the root at the top of each bar.
+        if (beat === 0) {
+          const osc = context.createOscillator();
+          const gain = context.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = root * 3;
+          gain.gain.setValueAtTime(0.0001, when);
+          gain.gain.exponentialRampToValueAtTime(0.035, when + 0.3);
+          gain.gain.exponentialRampToValueAtTime(0.0001, when + 1.9);
+          osc.connect(gain).connect(master);
+          osc.start(when);
+          osc.stop(when + 2.0);
+        }
+        step += 1;
+        nextAt += 0.48;
+      }
+    };
+    musicTimer = window.setInterval(tick, 240);
   }
 
   /** One oscillator note with an exponential decay envelope. */

@@ -59,6 +59,12 @@ export function drawHud(ctx, state) {
   ctx.font = '600 13px system-ui, sans-serif';
   ctx.fillStyle = COLORS.text;
   ctx.fillText(`WAVE ${waveNumberAt(state.elapsed)}`, field.width - 18, 45);
+  // A live kill chain burns gold under the score while it lasts.
+  if (state.combo >= 5) {
+    ctx.font = '800 16px system-ui, sans-serif';
+    ctx.fillStyle = COLORS.gold;
+    ctx.fillText(`CHAIN ×${state.combo}`, field.width - 18, 70);
+  }
   // XP bar along the very top, with the level badge.
   bar(ctx, 0, 0, field.width, 6, state.xp / xpForLevel(state.level), COLORS.xp);
   ctx.textAlign = 'left';
@@ -87,6 +93,37 @@ export function drawHud(ctx, state) {
     ctx.strokeRect(0, 0, field.width, field.height);
     ctx.restore();
   }
+}
+
+/**
+ * Centre-stage announcements: the run's objective, each new wave, the boss
+ * warning and the Eater's rise. `state.banner` carries {title, sub, until}
+ * against the run clock; the banner fades in, holds, and fades out.
+ */
+export function drawBanner(ctx, state) {
+  const banner = state.banner;
+  if (!banner || state.screen !== SCREEN_PLAY) return;
+  const remain = banner.until - state.time;
+  if (remain <= 0) return;
+  const age = state.time - banner.from;
+  const alpha = Math.max(0, Math.min(1, age / 0.25, remain / 0.4));
+  const { field } = state;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '800 40px system-ui, sans-serif';
+  ctx.fillStyle = banner.color || '#eafff3';
+  ctx.shadowColor = banner.color || COLORS.player;
+  ctx.shadowBlur = 18;
+  ctx.fillText(banner.title, field.width / 2, field.height * 0.3);
+  ctx.shadowBlur = 0;
+  if (banner.sub) {
+    ctx.font = '500 16px system-ui, sans-serif';
+    ctx.fillStyle = COLORS.text;
+    ctx.fillText(banner.sub, field.width / 2, field.height * 0.3 + 38);
+  }
+  ctx.restore();
 }
 
 function dimField(ctx, field, alpha = 0.62) {

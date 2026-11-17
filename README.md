@@ -17,7 +17,8 @@ node serve.ts
 
 - **Move:** WASD or arrow keys. **Aim:** the ship aims at the mouse and fires on its own.
 - Burst mites and gather the **light shards** they drop to fill the XP bar. Each level-up pauses the game and offers **3 upgrade cards** — damage, fire rate, speed, magnet range, hull, an energy shield, multishot, piercing bolts, regeneration — and they stack, so every run grows a different ship. Click a card, or press 1 / 2 / 3.
-- Waves escalate every 20 seconds; the **boss** rises at 3:00 with its own hull bar, spore bursts and mite shedding.
+- Waves escalate every 20 seconds; the **boss** rises at 3:00 with its own hull bar, spore bursts and mite shedding — and below a third of its hull it enrages, moving faster and spraying spores far more often.
+- Kills strung together within 2.5 seconds build a **CHAIN** counter that pays bonus score. Damage numbers, wave banners, a ten-second boss warning and hit-stop on heavy kills keep the fight readable, and a slow ambient synth loop plays under the action.
 - **Pause:** P or Esc. **Restart:** Enter on the end screens.
 - Survive to 5:00 to win; if your hull reaches zero the seed falls. Both end screens show your score. The HUD always shows hull, XP and level, the countdown, score and current wave.
 

@@ -34,20 +34,22 @@ export function createStarfield(field, rng) {
 export function drawBackground(ctx, field, starfield, time) {
   ctx.fillStyle = COLORS.void;
   ctx.fillRect(0, 0, field.width, field.height);
-  for (const nebula of starfield.nebulae) {
+  starfield.nebulae.forEach((nebula, i) => {
     const gradient = ctx.createRadialGradient(nebula.x, nebula.y, 0, nebula.x, nebula.y, nebula.radius);
     gradient.addColorStop(0, nebula.hue);
     gradient.addColorStop(1, 'rgba(5,7,15,0)');
-    ctx.globalAlpha = 0.5;
+    ctx.globalAlpha = 0.45 + 0.12 * Math.sin(time * 0.3 + i * 1.7);
     ctx.fillStyle = gradient;
     ctx.fillRect(nebula.x - nebula.radius, nebula.y - nebula.radius, nebula.radius * 2, nebula.radius * 2);
-  }
+  });
   ctx.globalAlpha = 1;
   for (const star of starfield.stars) {
     const alpha = 0.35 + 0.4 * Math.abs(Math.sin(time * 0.7 + star.twinkle));
     ctx.globalAlpha = alpha * star.depth;
     ctx.fillStyle = COLORS.star;
-    ctx.fillRect(star.x, star.y, star.size, star.size);
+    // The garden drifts slowly past, deeper stars trailing further behind.
+    const driftX = (star.x - time * 7 * star.depth) % field.width;
+    ctx.fillRect(driftX < 0 ? driftX + field.width : driftX, star.y, star.size, star.size);
   }
   ctx.globalAlpha = 1;
   // A faint dotted border marks the garden wall.
@@ -151,6 +153,13 @@ export function drawPlayer(ctx, player, time) {
 export function drawEnemy(ctx, enemy, time) {
   ctx.save();
   ctx.translate(enemy.x, enemy.y);
+  // New arrivals bloom in over a beat instead of popping into the world;
+  // the Eater takes longer, arriving like something surfacing.
+  const growTime = enemy.kind === 'boss' ? 0.9 : 0.3;
+  const grow = Math.min(1, enemy.spawnAge / growTime);
+  const scale = 1 - (1 - grow) * (1 - grow);
+  ctx.scale(scale, scale);
+  ctx.globalAlpha = 0.35 + 0.65 * grow;
   const flash = enemy.flashTimer > 0;
   const body = flash ? '#ffffff' : enemy.color;
   ctx.shadowColor = enemy.color;
@@ -218,8 +227,8 @@ export function drawEnemy(ctx, enemy, time) {
     ctx.beginPath();
     ctx.arc(0, 0, enemy.radius * 0.72, 0, Math.PI * 2);
     ctx.fill();
-    const pulse = 1 + Math.sin(time * 4) * 0.12;
-    ctx.fillStyle = '#ffe66d';
+    const pulse = 1 + Math.sin(time * (enemy.enraged ? 9 : 4)) * 0.12;
+    ctx.fillStyle = enemy.enraged ? '#ffb02e' : '#ffe66d';
     ctx.beginPath();
     ctx.arc(0, 0, enemy.radius * 0.3 * pulse, 0, Math.PI * 2);
     ctx.fill();
@@ -293,6 +302,25 @@ export function drawEffects(ctx, particles, rings) {
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
+}
+
+/** Floating combat text: damage numbers and chain milestones, rising and fading. */
+export function drawFloaters(ctx, floaters) {
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  let lastSize = 0;
+  for (const floater of floaters) {
+    const alpha = Math.max(0, Math.min(1, floater.life / (floater.maxLife * 0.6)));
+    ctx.globalAlpha = alpha;
+    if (floater.size !== lastSize) {
+      ctx.font = `700 ${floater.size}px system-ui, sans-serif`;
+      lastSize = floater.size;
+    }
+    ctx.fillStyle = floater.color;
+    ctx.fillText(floater.text, floater.x, floater.y);
+  }
+  ctx.restore();
 }
 
 /** The Bloom itself: a great flower opening over the garden on victory. */

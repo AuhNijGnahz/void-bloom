@@ -7,7 +7,7 @@
 // Screenshot scenes: ?shot=title|boss|upgrade|win stages that scene with the
 // real factories (see shots.js), paints it, and sets window.__shotReady.
 
-import { RUN_DURATION, STEP, WIN_SCORE_BONUS, xpForLevel } from './config.js';
+import { BOSS_TIME, RUN_DURATION, STEP, WIN_SCORE_BONUS, xpForLevel } from './config.js';
 import { createAudioEngine } from './audio.js';
 import { ACTION_CONFIRM, ACTION_PAUSE, createInput } from './input.js';
 import { clampPlayerToField, createPlayer, updatePlayer } from './player.js';
@@ -15,14 +15,14 @@ import { separateEnemies, spawnEnemy, updateEnemies } from './enemies.js';
 import { circlesOverlap, fireBossSporeBurst, firePlayerVolley, updateProjectiles } from './projectiles.js';
 import { dropShards, updatePickups } from './pickups.js';
 import { rollUpgradeChoices } from './upgrades.js';
-import { createWaveDirector, updateWaves } from './waves.js';
+import { createWaveDirector, updateWaves, waveNumberAt } from './waves.js';
 import {
   createStarfield, drawBackground, drawBloom, drawEffects, drawEnemy,
-  drawPickups, drawPlayer, drawProjectiles,
+  drawFloaters, drawPickups, drawPlayer, drawProjectiles,
 } from './render.js';
 import {
   SCREEN_LEVELUP, SCREEN_LOSE, SCREEN_PAUSED, SCREEN_PLAY, SCREEN_TITLE, SCREEN_WIN,
-  drawHud, drawLevelUpScreen, drawLoseScreen, drawPausedScreen, drawTitleScreen,
+  drawBanner, drawHud, drawLevelUpScreen, drawLoseScreen, drawPausedScreen, drawTitleScreen,
   drawWinScreen, pointInRect, upgradeCardRects,
 } from './ui.js';
 import { stageShotScene } from './shots.js';
@@ -87,6 +87,12 @@ function createState() {
     pickups: [],
     particles: [],
     rings: [],
+    floaters: [],
+    combo: 0,
+    comboTimer: 0,
+    hitStop: 0,
+    banner: null,
+    lastWave: 1,
     choices: [],
     pendingLevels: 0,
     director: createWaveDirector(),
@@ -106,7 +112,30 @@ function resetRun() {
   fresh.starfield = state.starfield;
   Object.assign(state, fresh);
   state.screen = SCREEN_PLAY;
+  state.banner = {
+    title: 'SURVIVE 5:00',
+    sub: 'The Bloom opens for the seed that lasts — grow with every level.',
+    from: state.time,
+    until: state.time + 2.6,
+  };
   announce('A new seed is planted. Survive five minutes.');
+}
+
+/** Queue a centre-stage announcement on the run clock. */
+function showBanner(title, sub, seconds, color) {
+  state.banner = { title, sub, from: state.time, until: state.time + seconds, color };
+}
+
+/** A piece of floating combat text (damage numbers, chain milestones). */
+function floaterAt(x, y, text, color, size = 13) {
+  // Under heavy fire the small damage numbers yield to the milestones:
+  // past thirty floaters only the big gold ones are worth painting.
+  if (size < 16 && state.floaters.length > 30) return;
+  if (state.floaters.length > 48) state.floaters.shift();
+  state.floaters.push({
+    x: x + (Math.random() - 0.5) * 14, y: y - 10,
+    life: 0.7, maxLife: 0.7, text, color, size,
+  });
 }
 
 /** Particle burst helper shared by kills, hits and the screenshot kit. */
@@ -159,15 +188,26 @@ function damagePlayer(amount) {
 
 function killEnemy(enemy) {
   enemy.alive = false;
-  state.score += enemy.score;
+  // Kills strung together inside the chain window feed a combo: each link
+  // pays a small score bonus, and every 25th link shouts about it.
+  state.combo += 1;
+  state.comboTimer = 2.5;
+  state.score += enemy.score + Math.min(state.combo, 40);
   state.kills += 1;
+  if (state.combo > 0 && state.combo % 25 === 0) {
+    floaterAt(state.player.x, state.player.y - 26, `CHAIN ×${state.combo}`, '#ffd94d', 19);
+  }
   dropShards(state.pickups, enemy.x, enemy.y, enemy.xp);
   burstAt(state, enemy.x, enemy.y, enemy.color, enemy.kind === 'boss' ? 42 : 10);
   ringAt(enemy.x, enemy.y, enemy.color);
   audio.kill();
+  // Heavy kills land with a breath of hit-stop; the boss earns a longer one.
+  if (enemy.kind === 'brute') state.hitStop = Math.max(state.hitStop, 0.045);
   if (enemy.kind === 'boss') {
     state.boss = null;
     state.shake = 12;
+    state.hitStop = Math.max(state.hitStop, 0.12);
+    showBanner('THE EATER BURSTS', 'Its light is yours. Now — survive to the Bloom.', 2.2, '#ffd94d');
     announce('The Bloom Eater bursts! Survive to the Bloom.');
   }
 }
@@ -252,6 +292,20 @@ function stepWorld(dt) {
   for (const ring of state.rings) ring.life -= dt;
   state.rings = state.rings.filter((ring) => ring.life > 0);
   state.shake = Math.max(0, state.shake - dt * 26);
+  for (const floater of state.floaters) {
+    floater.y -= 44 * dt;
+    floater.life -= dt;
+  }
+  state.floaters = state.floaters.filter((floater) => floater.life > 0);
+  // Hit-stop: the world holds its breath for a beat while effects play out.
+  if (state.hitStop > 0) {
+    state.hitStop -= dt;
+    return;
+  }
+  if (state.comboTimer > 0) {
+    state.comboTimer -= dt;
+    if (state.comboTimer <= 0) state.combo = 0;
+  }
 
   if (state.screen === SCREEN_WIN) {
     state.bloomProgress = Math.min(1, state.bloomProgress + dt / 1.5);
@@ -270,7 +324,21 @@ function stepWorld(dt) {
     ringAt(state.boss.x, state.boss.y, '#ff3860');
     state.shake = 9;
     audio.bossRoar();
+    showBanner('THE BLOOM EATER RISES', 'Break it, and the garden is yours to survive.', 2.4, '#ff8fab');
     announce('The Bloom Eater rises!');
+  }
+  // Ten seconds out, the garden goes quiet in warning.
+  if (!state.director.warnedBoss && state.elapsed >= BOSS_TIME - 10 && state.elapsed < BOSS_TIME) {
+    state.director.warnedBoss = true;
+    showBanner('SOMETHING STIRS IN THE DARK…', 'The Bloom Eater wakes in ten seconds.', 2.2, '#ff8fab');
+  }
+  // Each new wave announces itself, briefly, without stopping the fight.
+  const waveNow = waveNumberAt(state.elapsed);
+  if (waveNow !== state.lastWave) {
+    state.lastWave = waveNow;
+    if (state.elapsed > 1 && state.elapsed < BOSS_TIME - 12) {
+      showBanner(`WAVE ${waveNow}`, '', 1.1);
+    }
   }
 
   const input = gameInput;
@@ -283,6 +351,12 @@ function stepWorld(dt) {
 
   const enemyEvents = {};
   updateEnemies(state.enemies, dt, state.player, state.elapsed, enemyEvents);
+  if (enemyEvents.bossEnraged && state.boss) {
+    state.shake = Math.max(state.shake, 8);
+    ringAt(state.boss.x, state.boss.y, '#ffb02e');
+    showBanner('THE EATER RAGES', 'Wounded — and far more dangerous.', 1.8, '#ffb02e');
+    audio.bossRoar();
+  }
   if (enemyEvents.bossSporeBurst && state.boss && state.boss.alive) {
     fireBossSporeBurst(state.projectiles, state.boss, state.player);
   }
@@ -326,6 +400,7 @@ function resolveCollisions() {
       if (!circlesOverlap(shot, enemy)) continue;
       enemy.hp -= shot.damage;
       enemy.flashTimer = 0.08;
+      floaterAt(enemy.x, enemy.y - enemy.radius, `${Math.round(shot.damage)}`, '#c8ffe9', 12);
       burstAt(state, shot.x, shot.y, enemy.color, 3);
       audio.hit();
       if (enemy.hp <= 0) {
@@ -365,11 +440,13 @@ function render() {
   drawProjectiles(ctx, state.projectiles);
   if (state.screen !== SCREEN_LOSE) drawPlayer(ctx, state.player, state.time);
   drawEffects(ctx, state.particles, state.rings);
+  drawFloaters(ctx, state.floaters);
   ctx.restore();
 
   if (state.screen === SCREEN_PLAY || state.screen === SCREEN_LEVELUP || state.screen === SCREEN_PAUSED) {
     drawHud(ctx, state);
   }
+  drawBanner(ctx, state);
   if (state.screen === SCREEN_TITLE) drawTitleScreen(ctx, state);
   else if (state.screen === SCREEN_LEVELUP) drawLevelUpScreen(ctx, state);
   else if (state.screen === SCREEN_PAUSED) drawPausedScreen(ctx, state);

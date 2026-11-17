@@ -32,6 +32,8 @@ export function spawnEnemy(kind, x, y, elapsed) {
     sporeTimer: 1.6,
     shedTimer: 5,
     flashTimer: 0,
+    spawnAge: 0,
+    enraged: false,
     alive: true,
   };
 }
@@ -67,6 +69,7 @@ function steerToward(enemy, target, dt, speedFactor = 1) {
 export function updateEnemies(enemies, dt, player, elapsed, events) {
   for (const enemy of enemies) {
     enemy.flashTimer = Math.max(0, enemy.flashTimer - dt);
+    enemy.spawnAge += dt;
     enemy.wobblePhase += dt * 5;
     if (enemy.kind === 'mite') {
       const wobble = Math.sin(enemy.wobblePhase) * 26;
@@ -91,21 +94,28 @@ export function updateEnemies(enemies, dt, player, elapsed, events) {
     } else if (enemy.kind === 'brute') {
       steerToward(enemy, player, dt);
     } else if (enemy.kind === 'boss') {
+      // Wounded past a third of its hull, the Eater enrages: quicker, closer,
+      // and spraying spores half again as often.
+      if (!enemy.enraged && enemy.hp < enemy.maxHp * 0.35) {
+        enemy.enraged = true;
+        events.bossEnraged = true;
+      }
+      const pace = enemy.enraged ? 1.3 : 1;
       // The Eater keeps its distance and circles, closing in only slowly.
       const dx = player.x - enemy.x;
       const dy = player.y - enemy.y;
       const distance = Math.hypot(dx, dy) || 1;
-      const orbit = 230;
+      const orbit = enemy.enraged ? 190 : 230;
       const radial = distance > orbit + 30 ? 1 : distance < orbit - 30 ? -0.6 : 0;
       const tangentX = -dy / distance;
       const tangentY = dx / distance;
-      enemy.vx = ((dx / distance) * radial + tangentX * 0.8) * enemy.speed * 2.1;
-      enemy.vy = ((dy / distance) * radial + tangentY * 0.8) * enemy.speed * 2.1;
+      enemy.vx = ((dx / distance) * radial + tangentX * 0.8) * enemy.speed * 2.1 * pace;
+      enemy.vy = ((dy / distance) * radial + tangentY * 0.8) * enemy.speed * 2.1 * pace;
       enemy.x += enemy.vx * dt;
       enemy.y += enemy.vy * dt;
       enemy.sporeTimer -= dt;
       if (enemy.sporeTimer <= 0) {
-        enemy.sporeTimer = Math.max(0.85, 1.7 - elapsed / 300);
+        enemy.sporeTimer = Math.max(0.85, 1.7 - elapsed / 300) * (enemy.enraged ? 0.62 : 1);
         events.bossSporeBurst = true;
       }
       enemy.shedTimer -= dt;
